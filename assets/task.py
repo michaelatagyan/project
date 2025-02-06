@@ -1,7 +1,7 @@
-import random, sqlite3
+import random
 from docx import Document
-from possible_words import stress_dict, comma_list
-
+from .possible_words import stress_dict, comma_list
+from .DB_management import DB
 
 class task:
     def __init__(self):
@@ -94,9 +94,9 @@ class task:
         doc.add_section()
         i = 1
         for value in ans:
-            a = ''.join(map(str, value))
+            a = '; '.join(map(str, value))
             paragraph = doc.add_paragraph()
-            paragraph.add_run(f'{i}) {a}')
+            paragraph.add_run(f'{i}) Ответ: {a}')
             i += 1
         doc.save(pt)
 
@@ -155,6 +155,9 @@ class task:
         # print(' '.join(sentence), formatted_sentence, sep='\n')
 
         paragraph.add_run(formatted_sentence)
+        paragraph = doc.add_paragraph()
+        paragraph.add_run('Ответ:___________________________')
+        paragraph = doc.add_paragraph()
         doc.save(pt)
         self.fill_answers_19plus(sentence, formatted_sentence.split())
 
@@ -178,50 +181,59 @@ class task:
         paragraph = doc.add_paragraph()
 
         # Взаимодействие с БД, дабы получить список всех существующих слов
-
-        con = sqlite3.connect("identifier.db3")
-        cur = con.cursor()
-        r = cur.execute("""SELECT * FROM Data""")
-        data = r.fetchall()
+        # database_path = os.path.join(Path(), 'assets', 'identifier.db3')
+        # con = sqlite3.connect(database_path)
+        # cur = con.cursor()
+        data = DB.exec("SELECT * FROM Data")
         words = []
         for i in data:
             words.append(i[1])
 
-        # Имеем лист words, где записаны все слова, а также лист кортежей data
+        used_rules_ = [] # updated 03.02.2025
 
         ans = ''
         self.used_sentences.clear()
         while len(ans) not in [1, 2, 3, 4]:
             using = []
             tmp = []
-            for _ in range(5):
+            for _ in range(4): # updated 03.02.2025 (4 вместо 5)
                 word = random.choice(words)
-                r = cur.execute("""SELECT * FROM Data WHERE word = ?""", (word,))
-                check_rule = r.fetchall()   # Переменная для проверки, что слова в одном ряду обязательно на одно и то
-                # же правило
+                # r = cur.execute("""SELECT * FROM Data WHERE word = ?""", (word,))
+                # check_rule = r.fetchall()
+                check_rule = DB.exec("SELECT * FROM Data WHERE word=?", word)
                 check_rule = check_rule[0][2]
+                while check_rule in used_rules_: # updated 03.02.2025
+                    word = random.choice(words)
+                    # r = cur.execute("""SELECT * FROM Data WHERE word = ?""", (word,)) # updated 03.02.2025
+                    # check_rule = r.fetchall()  # updated 03.02.2025
+                    check_rule = DB.exec("SELECT * FROM Data WHERE word=?", word)
+                    check_rule = check_rule[0][2] # updated 03.02.2025
+                used_rules_.append(check_rule) # updated 03.02.2025
                 rule = check_rule
                 while len(tmp) < 3:
-                    if word not in self.used_sentences and rule == check_rule:
-                        r = cur.execute("""SELECT * FROM Data WHERE word = ?""", (word,))
-                        ap = r.fetchall()
+                    if word not in self.used_sentences and rule == check_rule: # added
+                        # r = cur.execute("""SELECT * FROM Data WHERE word = ?""", (word,))
+                        ap = DB.exec("SELECT * FROM Data WHERE word=?", word)
                         ap = ap[0][3]
                         self.used_sentences.append(word)
                         tmp.append(ap)
                     else:
                         word = random.choice(words)
-                        r = cur.execute("""SELECT * FROM Data WHERE word = ?""", (word,))
-                        rule = r.fetchall()
+                        # r = cur.execute("""SELECT * FROM Data WHERE word = ?""", (word,))
+                        # rule = r.fetchall()
+                        rule = DB.exec("SELECT * FROM Data WHERE word=?", word)
                         rule = rule[0][2]
                 using.append(tmp[:])
                 tmp.clear()
 
+            used_rules_.clear() # updated 03.02.2025
             c = 0
             for j in using:
                 seq = ''
                 for i in j:
-                    r = cur.execute("""SELECT * FROM Data WHERE formatted = ?""", (i,))
-                    ltr = r.fetchall()
+                    # r = cur.execute("""SELECT * FROM Data WHERE formatted = ?""", (i,))
+                    # ltr = r.fetchall()
+                    ltr = DB.exec("SELECT * FROM Data WHERE formatted=?", i)
                     ltr = ltr[0][-1]
                     seq += ltr
                 c += 1
@@ -239,5 +251,10 @@ class task:
             line = line[0:len(line) - 2]
             paragraph.add_run(line)
             paragraph = doc.add_paragraph()
+        paragraph.add_run('Ответ:___________________________')
+        paragraph = doc.add_paragraph()
         doc.save(pt)
+        # con.close()
+
+
 tsk = task()
